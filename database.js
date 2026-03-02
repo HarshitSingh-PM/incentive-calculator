@@ -40,14 +40,22 @@ async function initTables() {
       over_target_sales INTEGER NOT NULL DEFAULT 0,
       over_target_incentive NUMERIC NOT NULL DEFAULT 0,
       total_incentive NUMERIC NOT NULL DEFAULT 0,
+      indicative_incentive NUMERIC NOT NULL DEFAULT 0,
       calculated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(agent_name, month)
     );
   `);
 }
 
-// Initialize tables on startup
-initTables().catch(err => console.error('Failed to init tables:', err));
+async function migrate() {
+  // Add indicative_incentive column if missing
+  await pool.query(`
+    ALTER TABLE incentive_results ADD COLUMN IF NOT EXISTS indicative_incentive NUMERIC NOT NULL DEFAULT 0
+  `).catch(() => {});
+}
+
+// Initialize tables and run migrations on startup
+initTables().then(() => migrate()).catch(err => console.error('Failed to init tables:', err));
 
 // --- Incentive Config ---
 
@@ -123,6 +131,7 @@ async function calculateAndSave(month, salesData, config, targets) {
     const actualSales = agent['Count'];
     const target = targetMap[agentName] || 0;
     const targetMet = actualSales >= target && target > 0;
+    const indicativeInc = actualSales * config.fixed_incentive;
     const fixedInc = targetMet ? actualSales * config.fixed_incentive : 0;
     const overTargetSales = targetMet ? Math.max(0, actualSales - target) : 0;
     const overTargetInc = overTargetSales * config.over_target_rate;
@@ -138,6 +147,7 @@ async function calculateAndSave(month, salesData, config, targets) {
       over_target_sales: overTargetSales,
       over_target_incentive: overTargetInc,
       total_incentive: totalInc,
+      indicative_incentive: indicativeInc,
     });
   }
 
@@ -146,8 +156,8 @@ async function calculateAndSave(month, salesData, config, targets) {
     await client.query('BEGIN');
     for (const r of results) {
       await client.query(`
-        INSERT INTO incentive_results (agent_name, month, target, actual_sales, target_met, fixed_incentive, over_target_sales, over_target_incentive, total_incentive)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO incentive_results (agent_name, month, target, actual_sales, target_met, fixed_incentive, over_target_sales, over_target_incentive, total_incentive, indicative_incentive)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT(agent_name, month) DO UPDATE SET
           target = EXCLUDED.target,
           actual_sales = EXCLUDED.actual_sales,
@@ -156,11 +166,12 @@ async function calculateAndSave(month, salesData, config, targets) {
           over_target_sales = EXCLUDED.over_target_sales,
           over_target_incentive = EXCLUDED.over_target_incentive,
           total_incentive = EXCLUDED.total_incentive,
+          indicative_incentive = EXCLUDED.indicative_incentive,
           calculated_at = NOW()
       `, [
         r.agent_name, r.month, r.target, r.actual_sales,
         r.target_met, r.fixed_incentive, r.over_target_sales,
-        r.over_target_incentive, r.total_incentive
+        r.over_target_incentive, r.total_incentive, r.indicative_incentive
       ]);
     }
     await client.query('COMMIT');

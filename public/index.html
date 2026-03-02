@@ -517,7 +517,7 @@
       return;
     }
 
-    let totalFixed = 0, totalOver = 0, totalIncentive = 0;
+    let totalIndicative = 0, totalFixed = 0, totalOver = 0, totalIncentive = 0;
 
     let html = `
       <table>
@@ -527,6 +527,7 @@
             <th>Target</th>
             <th>Actual</th>
             <th>Met?</th>
+            <th>Indicative (SAR)</th>
             <th>Actual x Fixed (SAR)</th>
             <th>Over Target</th>
             <th>Over x Rate (SAR)</th>
@@ -537,9 +538,11 @@
     `;
 
     for (const r of data) {
-      totalFixed += r.fixed_incentive;
-      totalOver += r.over_target_incentive;
-      totalIncentive += r.total_incentive;
+      const indicative = Number(r.indicative_incentive) || 0;
+      totalIndicative += indicative;
+      totalFixed += Number(r.fixed_incentive);
+      totalOver += Number(r.over_target_incentive);
+      totalIncentive += Number(r.total_incentive);
 
       const metBadge = r.target_met
         ? '<span class="badge badge-green">Yes</span>'
@@ -551,10 +554,11 @@
           <td>${r.target}</td>
           <td>${r.actual_sales}</td>
           <td>${metBadge}</td>
-          <td class="sar">${r.fixed_incentive.toLocaleString()}</td>
+          <td class="sar" style="color:#6366f1;">${indicative.toLocaleString()}</td>
+          <td class="sar">${Number(r.fixed_incentive).toLocaleString()}</td>
           <td>${r.over_target_sales}</td>
-          <td class="sar">${r.over_target_incentive.toLocaleString()}</td>
-          <td class="sar sar-green">${r.total_incentive.toLocaleString()}</td>
+          <td class="sar">${Number(r.over_target_incentive).toLocaleString()}</td>
+          <td class="sar sar-green">${Number(r.total_incentive).toLocaleString()}</td>
         </tr>
       `;
     }
@@ -562,6 +566,7 @@
     html += `
         <tr class="total-row">
           <td colspan="4">TOTAL</td>
+          <td class="sar" style="color:#6366f1;">${totalIndicative.toLocaleString()}</td>
           <td class="sar">${totalFixed.toLocaleString()}</td>
           <td></td>
           <td class="sar">${totalOver.toLocaleString()}</td>
