@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Incentive Calculator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+    /* --- Login --- */
+    .login-overlay { position: fixed; inset: 0; background: linear-gradient(135deg, #1a1a2e, #16213e); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .login-box { background: #fff; border-radius: 12px; padding: 40px; width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+    .login-box h1 { font-size: 20px; color: #16213e; margin-bottom: 4px; }
+    .login-box p { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+    .login-box .form-group { margin-bottom: 16px; }
+    .login-box label { display: block; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .login-box input { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+    .login-box input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .login-box button { width: 100%; padding: 12px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .login-box button:hover { background: #2563eb; }
+    .login-error { color: #dc2626; font-size: 13px; margin-bottom: 12px; display: none; }
+
+    /* --- App --- */
+    .app { display: none; }
+
+    .header { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; }
+    .header-left h1 { font-size: 22px; font-weight: 600; }
+    .header-left p { font-size: 13px; color: #a0aec0; margin-top: 4px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .header-user { font-size: 13px; color: #a0aec0; }
+    .btn-logout { padding: 6px 14px; background: rgba(255,255,255,0.1); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .btn-logout:hover { background: rgba(255,255,255,0.2); }
+
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+
+    .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 24px; margin-bottom: 20px; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+    .card-header h2 { font-size: 16px; font-weight: 600; color: #16213e; }
+    .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #16213e; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+
+    .row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .row .card { flex: 1; min-width: 300px; }
+
+    label { display: block; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    input, select { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; transition: border-color 0.2s; }
+    input:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+
+    .form-group { margin-bottom: 14px; }
+    .form-row { display: flex; gap: 12px; }
+    .form-row .form-group { flex: 1; }
+
+    button { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-success { background: #10b981; color: #fff; }
+    .btn-success:hover { background: #059669; }
+    .btn-secondary { background: #e2e8f0; color: #475569; }
+    .btn-secondary:hover { background: #cbd5e1; }
+    .btn-refresh { padding: 6px 14px; background: #f0f9ff; color: #3b82f6; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+    .btn-refresh:hover { background: #dbeafe; }
+    .btn-refresh.spinning svg { animation: spin 0.8s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 8px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f8fafc; text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+    tr:hover td { background: #f8fafc; }
+
+    td input { padding: 6px 8px; text-align: center; font-size: 13px; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+
+    .total-row td { font-weight: 700; background: #f0f9ff; border-top: 2px solid #3b82f6; }
+
+    .status { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; display: none; }
+    .status.success { display: block; background: #d1fae5; color: #065f46; }
+    .status.error { display: block; background: #fee2e2; color: #991b1b; }
+
+    .empty-state { text-align: center; padding: 40px; color: #94a3b8; }
+    .empty-state p { font-size: 14px; }
+
+    .loading { text-align: center; padding: 20px; color: #94a3b8; }
+
+    .sar { font-family: 'Courier New', monospace; font-weight: 600; }
+    .sar-green { color: #059669; }
+    .sar-dim { color: #94a3b8; }
+
+    @media (max-width: 700px) {
+      .form-row { flex-direction: column; }
+      .row { flex-direction: column; }
+      .row .card { min-width: auto; }
+      .header { flex-direction: column; gap: 12px; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Login Screen -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-box">
+      <h1>Sales Incentive Calculator</h1>
+      <p>Sign in to manage targets and calculate incentives</p>
+      <div id="loginError" class="login-error"></div>
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="loginUser" autocomplete="username" required />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="loginPass" autocomplete="current-password" required />
+        </div>
+        <button type="submit">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app" class="app">
+    <div class="header">
+      <div class="header-left">
+        <h1>Sales Incentive Calculator</h1>
+        <p>Configure targets, fetch sales from Metabase, and calculate incentives</p>
+      </div>
+      <div class="header-right">
+        <span class="header-user" id="headerUser"></span>
+        <button class="btn-logout" onclick="handleLogout()">Logout</button>
+      </div>
+    </div>
+
+    <div class="container">
+      <div id="status" class="status"></div>
+
+      <!-- Month + Config -->
+      <div class="row">
+        <div class="card" style="flex: 0.4;">
+          <h2>Select Month</h2>
+          <div class="form-group">
+            <label>Month</label>
+            <input type="month" id="monthPicker" />
+          </div>
+          <button class="btn-primary" onclick="loadMonth()" style="width:100%;">Load Data</button>
+        </div>
+
+        <div class="card" style="flex: 0.6;">
+          <h2>Incentive Configuration</h2>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Fixed Incentive (SAR)</label>
+              <input type="number" id="fixedIncentive" value="300" min="0" step="50" />
+            </div>
+            <div class="form-group">
+              <label>Per Car Over Target (SAR)</label>
+              <input type="number" id="overTargetRate" value="500" min="0" step="50" />
+            </div>
+          </div>
+          <button class="btn-secondary" onclick="saveConfig()">Save Config</button>
+        </div>
+      </div>
+
+      <!-- Agent Targets -->
+      <div class="card">
+        <div class="card-header">
+          <h2 style="border:none;margin:0;padding:0;">Agent Targets & Sales</h2>
+          <button class="btn-refresh" id="refreshBtn" onclick="refreshFromMetabase()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Refresh from Metabase
+          </button>
+        </div>
+        <div id="targetsArea">
+          <div class="empty-state"><p>Select a month and click "Load Data" to see agents</p></div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="card">
+        <h2>Incentive Results</h2>
+        <div id="resultsArea">
+          <div class="empty-state"><p>Set targets and click "Calculate Incentives" to see results</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let authToken = localStorage.getItem('auth_token');
+
+  // --- Auth helpers ---
+
+  function authHeaders(extra = {}) {
+    return { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json', ...extra };
+  }
+
+  async function apiFetch(url, opts = {}) {
+    opts.headers = { ...authHeaders(), ...(opts.headers || {}) };
+    const res = await fetch(url, opts);
+    if (res.status === 401) {
+      localStorage.removeItem('auth_token');
+      authToken = null;
+      showLogin();
+      throw new Error('Session expired. Please sign in again.');
+    }
+    return res;
+  }
+
+  function showLogin() {
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
+
+  function showApp() {
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('headerUser').textContent = localStorage.getItem('auth_user') || '';
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    const username = document.getElementById('loginUser').value;
+    const password = document.getElementById('loginPass').value;
+    const errEl = document.getElementById('loginError');
+
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errEl.textContent = data.error;
+        errEl.style.display = 'block';
+        return;
+      }
+      authToken = data.token;
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('auth_user', username);
+      errEl.style.display = 'none';
+      showApp();
+    } catch (err) {
+      errEl.textContent = 'Connection error. Please try again.';
+      errEl.style.display = 'block';
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await fetch('/api/logout', { method: 'POST', headers: authHeaders() });
+    } catch {}
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+    authToken = null;
+    showLogin();
+  }
+
+  // Check if already logged in
+  if (authToken) {
+    // Verify token is still valid
+    fetch('/api/config/test', { headers: { 'Authorization': `Bearer ${authToken}` } })
+      .then(r => { if (r.ok) showApp(); else showLogin(); })
+      .catch(() => showLogin());
+  } else {
+    showLogin();
+  }
+
+  // --- App logic ---
+
+  const monthPicker = document.getElementById('monthPicker');
+  const now = new Date();
+  monthPicker.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  let agentsList = [];
+  let salesMap = {};
+
+  function showStatus(msg, type) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = `status ${type}`;
+    setTimeout(() => { el.className = 'status'; }, 4000);
+  }
+
+  async function loadMonth() {
+    const month = monthPicker.value;
+    if (!month) return showStatus('Please select a month', 'error');
+
+    document.getElementById('targetsArea').innerHTML = '<div class="loading">Loading data from Metabase...</div>';
+
+    try {
+      const [agentsRes, salesRes, configRes, targetsRes] = await Promise.all([
+        apiFetch('/api/agents').then(r => r.json()),
+        apiFetch(`/api/sales/${month}`).then(r => r.json()),
+        apiFetch(`/api/config/${month}`).then(r => r.json()),
+        apiFetch(`/api/targets/${month}`).then(r => r.json()),
+      ]);
+
+      agentsList = agentsRes.map(a => a.Name).sort();
+      salesMap = {};
+      for (const s of salesRes) {
+        salesMap[s['Sales Agent']] = s['Count'];
+      }
+
+      document.getElementById('fixedIncentive').value = configRes.fixed_incentive;
+      document.getElementById('overTargetRate').value = configRes.over_target_rate;
+
+      const targetMap = {};
+      for (const t of targetsRes) {
+        targetMap[t.agent_name] = t.target;
+      }
+
+      const allAgents = [...new Set([...Object.keys(salesMap), ...Object.keys(targetMap), ...agentsList])];
+      const withSales = allAgents.filter(a => salesMap[a]).sort((a, b) => (salesMap[b] || 0) - (salesMap[a] || 0));
+      const withoutSales = allAgents.filter(a => !salesMap[a]).sort();
+
+      renderTargetsTable(withSales, withoutSales, targetMap);
+      await loadResults(month);
+
+      showStatus(`Loaded data for ${month}`, 'success');
+    } catch (err) {
+      showStatus(`Error: ${err.message}`, 'error');
+    }
+  }
+
+  async function refreshFromMetabase() {
+    const month = monthPicker.value;
+    if (!month) return showStatus('Please select a month first', 'error');
+
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spinning');
+    btn.disabled = true;
+
+    try {
+      const [agentsRes, salesRes] = await Promise.all([
+        apiFetch('/api/agents').then(r => r.json()),
+        apiFetch(`/api/sales/${month}`).then(r => r.json()),
+      ]);
+
+      agentsList = agentsRes.map(a => a.Name).sort();
+      salesMap = {};
+      for (const s of salesRes) {
+        salesMap[s['Sales Agent']] = s['Count'];
+      }
+
+      // Preserve current target inputs
+      const targetMap = {};
+      document.querySelectorAll('.target-input').forEach(inp => {
+        targetMap[inp.dataset.agent] = parseInt(inp.value) || 0;
+      });
+
+      const allAgents = [...new Set([...Object.keys(salesMap), ...Object.keys(targetMap), ...agentsList])];
+      const withSales = allAgents.filter(a => salesMap[a]).sort((a, b) => (salesMap[b] || 0) - (salesMap[a] || 0));
+      const withoutSales = allAgents.filter(a => !salesMap[a]).sort();
+
+      renderTargetsTable(withSales, withoutSales, targetMap);
+      showStatus('Sales data refreshed from Metabase', 'success');
+    } catch (err) {
+      showStatus(`Refresh failed: ${err.message}`, 'error');
+    } finally {
+      btn.classList.remove('spinning');
+      btn.disabled = false;
+    }
+  }
+
+  function renderTargetsTable(withSales, withoutSales, targetMap) {
+    const area = document.getElementById('targetsArea');
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40%">Agent Name</th>
+            <th style="width:20%">Sales This Month</th>
+            <th style="width:20%">Target</th>
+            <th style="width:20%">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const agent of withSales) {
+      const sales = salesMap[agent] || 0;
+      const target = targetMap[agent] || 0;
+      const met = target > 0 && sales >= target;
+      const badge = target === 0
+        ? '<span class="badge" style="background:#f1f5f9;color:#94a3b8;">No Target</span>'
+        : met
+          ? '<span class="badge badge-green">Target Met</span>'
+          : `<span class="badge badge-red">${Math.round((sales/target)*100)}%</span>`;
+
+      html += `
+        <tr>
+          <td><strong>${agent}</strong></td>
+          <td><span class="sar sar-green">${sales}</span></td>
+          <td><input type="number" class="target-input" data-agent="${agent}" value="${target}" min="0" /></td>
+          <td>${badge}</td>
+        </tr>
+      `;
+    }
+
+    if (withoutSales.length > 0) {
+      html += `
+        <tr><td colspan="4" style="background:#f8fafc;padding:6px 12px;">
+          <details>
+            <summary style="cursor:pointer;font-size:12px;color:#64748b;font-weight:600;">
+              Other agents with no sales this month (${withoutSales.length})
+            </summary>
+          </details>
+        </td></tr>
+      `;
+      for (const agent of withoutSales) {
+        const target = targetMap[agent] || 0;
+        html += `
+          <tr class="no-sales-row" style="display:none;">
+            <td>${agent}</td>
+            <td><span class="sar sar-dim">0</span></td>
+            <td><input type="number" class="target-input" data-agent="${agent}" value="${target}" min="0" /></td>
+            <td><span class="badge" style="background:#f1f5f9;color:#94a3b8;">No Sales</span></td>
+          </tr>
+        `;
+      }
+    }
+
+    html += '</tbody></table>';
+    html += `
+      <div class="btn-row" style="margin-top:16px;">
+        <button class="btn-secondary" onclick="saveTargets()">Save Targets</button>
+        <button class="btn-success" onclick="calculate()">Calculate Incentives</button>
+      </div>
+    `;
+
+    area.innerHTML = html;
+
+    const details = area.querySelector('details');
+    if (details) {
+      details.addEventListener('toggle', () => {
+        const rows = area.querySelectorAll('.no-sales-row');
+        rows.forEach(r => r.style.display = details.open ? '' : 'none');
+      });
+    }
+  }
+
+  async function saveConfig() {
+    const month = monthPicker.value;
+    const fixed_incentive = parseFloat(document.getElementById('fixedIncentive').value);
+    const over_target_rate = parseFloat(document.getElementById('overTargetRate').value);
+
+    try {
+      await apiFetch('/api/config', {
+        method: 'POST',
+        body: JSON.stringify({ month, fixed_incentive, over_target_rate }),
+      });
+      showStatus('Config saved', 'success');
+    } catch (err) {
+      showStatus(`Error saving config: ${err.message}`, 'error');
+    }
+  }
+
+  async function saveTargets() {
+    const month = monthPicker.value;
+    const inputs = document.querySelectorAll('.target-input');
+    const targets = [];
+    inputs.forEach(inp => {
+      const val = parseInt(inp.value) || 0;
+      targets.push({ agent_name: inp.dataset.agent, target: val });
+    });
+
+    try {
+      await apiFetch('/api/targets', {
+        method: 'POST',
+        body: JSON.stringify({ month, targets }),
+      });
+      showStatus('Targets saved', 'success');
+    } catch (err) {
+      showStatus(`Error saving targets: ${err.message}`, 'error');
+    }
+  }
+
+  async function calculate() {
+    const month = monthPicker.value;
+
+    await saveConfig();
+    await saveTargets();
+
+    try {
+      const res = await apiFetch('/api/calculate', {
+        method: 'POST',
+        body: JSON.stringify({ month }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return showStatus(data.error, 'error');
+      }
+      renderResults(data);
+      showStatus('Incentives calculated and saved to database', 'success');
+      loadMonth();
+    } catch (err) {
+      showStatus(`Error: ${err.message}`, 'error');
+    }
+  }
+
+  async function loadResults(month) {
+    try {
+      const data = await apiFetch(`/api/results/${month}`).then(r => r.json());
+      if (data.length > 0) renderResults(data);
+    } catch {}
+  }
+
+  function renderResults(data) {
+    const area = document.getElementById('resultsArea');
+
+    if (!data || data.length === 0) {
+      area.innerHTML = '<div class="empty-state"><p>No results yet</p></div>';
+      return;
+    }
+
+    let totalFixed = 0, totalOver = 0, totalIncentive = 0;
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Target</th>
+            <th>Actual</th>
+            <th>Met?</th>
+            <th>Actual x Fixed (SAR)</th>
+            <th>Over Target</th>
+            <th>Over x Rate (SAR)</th>
+            <th>Total (SAR)</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const r of data) {
+      totalFixed += r.fixed_incentive;
+      totalOver += r.over_target_incentive;
+      totalIncentive += r.total_incentive;
+
+      const metBadge = r.target_met
+        ? '<span class="badge badge-green">Yes</span>'
+        : '<span class="badge badge-red">No</span>';
+
+      html += `
+        <tr>
+          <td><strong>${r.agent_name}</strong></td>
+          <td>${r.target}</td>
+          <td>${r.actual_sales}</td>
+          <td>${metBadge}</td>
+          <td class="sar">${r.fixed_incentive.toLocaleString()}</td>
+          <td>${r.over_target_sales}</td>
+          <td class="sar">${r.over_target_incentive.toLocaleString()}</td>
+          <td class="sar sar-green">${r.total_incentive.toLocaleString()}</td>
+        </tr>
+      `;
+    }
+
+    html += `
+        <tr class="total-row">
+          <td colspan="4">TOTAL</td>
+          <td class="sar">${totalFixed.toLocaleString()}</td>
+          <td></td>
+          <td class="sar">${totalOver.toLocaleString()}</td>
+          <td class="sar sar-green">${totalIncentive.toLocaleString()}</td>
+        </tr>
+      </tbody></table>
+    `;
+
+    area.innerHTML = html;
+  }
+</script>
+</body>
+</html>
