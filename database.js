@@ -1,120 +1,116 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const { Pool } = require('pg');
 
-const DB_PATH = path.join(__dirname, 'data', 'incentives.db');
+const pool = new Pool({
+  host: process.env.PG_HOST || '127.0.0.1',
+  port: process.env.PG_PORT || 5432,
+  database: process.env.PG_DATABASE || 'incentive_calculator',
+  user: process.env.PG_USER || 'incentive',
+  password: process.env.PG_PASSWORD || 'halacarly2026',
+});
 
-let db;
-
-function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initTables();
-  }
-  return db;
-}
-
-function initTables() {
-  const d = getDb();
-
-  d.exec(`
+async function initTables() {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS incentive_config (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       month TEXT NOT NULL UNIQUE,
-      fixed_incentive REAL NOT NULL DEFAULT 300,
-      over_target_rate REAL NOT NULL DEFAULT 500,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      fixed_incentive NUMERIC NOT NULL DEFAULT 300,
+      over_target_rate NUMERIC NOT NULL DEFAULT 500,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS agent_targets (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       agent_name TEXT NOT NULL,
       month TEXT NOT NULL,
       target INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(agent_name, month)
     );
 
     CREATE TABLE IF NOT EXISTS incentive_results (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       agent_name TEXT NOT NULL,
       month TEXT NOT NULL,
       target INTEGER NOT NULL,
       actual_sales INTEGER NOT NULL,
-      target_met INTEGER NOT NULL DEFAULT 0,
-      fixed_incentive REAL NOT NULL DEFAULT 0,
+      target_met BOOLEAN NOT NULL DEFAULT FALSE,
+      fixed_incentive NUMERIC NOT NULL DEFAULT 0,
       over_target_sales INTEGER NOT NULL DEFAULT 0,
-      over_target_incentive REAL NOT NULL DEFAULT 0,
-      total_incentive REAL NOT NULL DEFAULT 0,
-      calculated_at TEXT DEFAULT (datetime('now')),
+      over_target_incentive NUMERIC NOT NULL DEFAULT 0,
+      total_incentive NUMERIC NOT NULL DEFAULT 0,
+      calculated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(agent_name, month)
     );
   `);
 }
 
+// Initialize tables on startup
+initTables().catch(err => console.error('Failed to init tables:', err));
+
 // --- Incentive Config ---
 
-function getConfig(month) {
-  const d = getDb();
-  return d.prepare('SELECT * FROM incentive_config WHERE month = ?').get(month);
+async function getConfig(month) {
+  const { rows } = await pool.query('SELECT * FROM incentive_config WHERE month = $1', [month]);
+  return rows[0] || null;
 }
 
-function upsertConfig(month, fixedIncentive, overTargetRate) {
-  const d = getDb();
-  d.prepare(`
+async function upsertConfig(month, fixedIncentive, overTargetRate) {
+  await pool.query(`
     INSERT INTO incentive_config (month, fixed_incentive, over_target_rate)
-    VALUES (?, ?, ?)
+    VALUES ($1, $2, $3)
     ON CONFLICT(month) DO UPDATE SET
-      fixed_incentive = excluded.fixed_incentive,
-      over_target_rate = excluded.over_target_rate,
-      updated_at = datetime('now')
-  `).run(month, fixedIncentive, overTargetRate);
+      fixed_incentive = EXCLUDED.fixed_incentive,
+      over_target_rate = EXCLUDED.over_target_rate,
+      updated_at = NOW()
+  `, [month, fixedIncentive, overTargetRate]);
   return getConfig(month);
 }
 
 // --- Agent Targets ---
 
-function getTargets(month) {
-  const d = getDb();
-  return d.prepare('SELECT * FROM agent_targets WHERE month = ?').all(month);
+async function getTargets(month) {
+  const { rows } = await pool.query('SELECT * FROM agent_targets WHERE month = $1', [month]);
+  return rows;
 }
 
-function upsertTarget(agentName, month, target) {
-  const d = getDb();
-  d.prepare(`
+async function upsertTarget(agentName, month, target) {
+  await pool.query(`
     INSERT INTO agent_targets (agent_name, month, target)
-    VALUES (?, ?, ?)
+    VALUES ($1, $2, $3)
     ON CONFLICT(agent_name, month) DO UPDATE SET
-      target = excluded.target,
-      updated_at = datetime('now')
-  `).run(agentName, month, target);
+      target = EXCLUDED.target,
+      updated_at = NOW()
+  `, [agentName, month, target]);
 }
 
-function upsertTargetsBulk(month, targets) {
-  const d = getDb();
-  const stmt = d.prepare(`
-    INSERT INTO agent_targets (agent_name, month, target)
-    VALUES (?, ?, ?)
-    ON CONFLICT(agent_name, month) DO UPDATE SET
-      target = excluded.target,
-      updated_at = datetime('now')
-  `);
-  const transaction = d.transaction((items) => {
-    for (const item of items) {
-      stmt.run(item.agent_name, month, item.target);
+async function upsertTargetsBulk(month, targets) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const item of targets) {
+      await client.query(`
+        INSERT INTO agent_targets (agent_name, month, target)
+        VALUES ($1, $2, $3)
+        ON CONFLICT(agent_name, month) DO UPDATE SET
+          target = EXCLUDED.target,
+          updated_at = NOW()
+      `, [item.agent_name, month, item.target]);
     }
-  });
-  transaction(targets);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
   return getTargets(month);
 }
 
 // --- Incentive Results ---
 
-function calculateAndSave(month, salesData, config, targets) {
-  const d = getDb();
+async function calculateAndSave(month, salesData, config, targets) {
   const targetMap = {};
   for (const t of targets) {
     targetMap[t.agent_name] = t.target;
@@ -126,7 +122,7 @@ function calculateAndSave(month, salesData, config, targets) {
     const agentName = agent['Sales Agent'];
     const actualSales = agent['Count'];
     const target = targetMap[agentName] || 0;
-    const targetMet = actualSales >= target && target > 0 ? 1 : 0;
+    const targetMet = actualSales >= target && target > 0;
     const fixedInc = targetMet ? actualSales * config.fixed_incentive : 0;
     const overTargetSales = targetMet ? Math.max(0, actualSales - target) : 0;
     const overTargetInc = overTargetSales * config.over_target_rate;
@@ -145,44 +141,49 @@ function calculateAndSave(month, salesData, config, targets) {
     });
   }
 
-  const stmt = d.prepare(`
-    INSERT INTO incentive_results (agent_name, month, target, actual_sales, target_met, fixed_incentive, over_target_sales, over_target_incentive, total_incentive)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(agent_name, month) DO UPDATE SET
-      target = excluded.target,
-      actual_sales = excluded.actual_sales,
-      target_met = excluded.target_met,
-      fixed_incentive = excluded.fixed_incentive,
-      over_target_sales = excluded.over_target_sales,
-      over_target_incentive = excluded.over_target_incentive,
-      total_incentive = excluded.total_incentive,
-      calculated_at = datetime('now')
-  `);
-
-  const transaction = d.transaction((items) => {
-    for (const r of items) {
-      stmt.run(
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const r of results) {
+      await client.query(`
+        INSERT INTO incentive_results (agent_name, month, target, actual_sales, target_met, fixed_incentive, over_target_sales, over_target_incentive, total_incentive)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT(agent_name, month) DO UPDATE SET
+          target = EXCLUDED.target,
+          actual_sales = EXCLUDED.actual_sales,
+          target_met = EXCLUDED.target_met,
+          fixed_incentive = EXCLUDED.fixed_incentive,
+          over_target_sales = EXCLUDED.over_target_sales,
+          over_target_incentive = EXCLUDED.over_target_incentive,
+          total_incentive = EXCLUDED.total_incentive,
+          calculated_at = NOW()
+      `, [
         r.agent_name, r.month, r.target, r.actual_sales,
         r.target_met, r.fixed_incentive, r.over_target_sales,
         r.over_target_incentive, r.total_incentive
-      );
+      ]);
     }
-  });
-  transaction(results);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 
   return results;
 }
 
-function getResults(month) {
-  const d = getDb();
+async function getResults(month) {
   if (month) {
-    return d.prepare('SELECT * FROM incentive_results WHERE month = ? ORDER BY total_incentive DESC').all(month);
+    const { rows } = await pool.query('SELECT * FROM incentive_results WHERE month = $1 ORDER BY total_incentive DESC', [month]);
+    return rows;
   }
-  return d.prepare('SELECT * FROM incentive_results ORDER BY month DESC, total_incentive DESC').all();
+  const { rows } = await pool.query('SELECT * FROM incentive_results ORDER BY month DESC, total_incentive DESC');
+  return rows;
 }
 
 module.exports = {
-  getDb,
   getConfig,
   upsertConfig,
   getTargets,

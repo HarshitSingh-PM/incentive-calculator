@@ -91,28 +91,44 @@ app.get('/api/agents', async (req, res) => {
 
 // --- Config ---
 
-app.get('/api/config/:month', (req, res) => {
-  const config = db.getConfig(req.params.month);
-  res.json(config || { month: req.params.month, fixed_incentive: 300, over_target_rate: 500 });
+app.get('/api/config/:month', async (req, res) => {
+  try {
+    const config = await db.getConfig(req.params.month);
+    res.json(config || { month: req.params.month, fixed_incentive: 300, over_target_rate: 500 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/config', (req, res) => {
-  const { month, fixed_incentive, over_target_rate } = req.body;
-  const config = db.upsertConfig(month, fixed_incentive, over_target_rate);
-  res.json(config);
+app.post('/api/config', async (req, res) => {
+  try {
+    const { month, fixed_incentive, over_target_rate } = req.body;
+    const config = await db.upsertConfig(month, fixed_incentive, over_target_rate);
+    res.json(config);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Targets ---
 
-app.get('/api/targets/:month', (req, res) => {
-  const targets = db.getTargets(req.params.month);
-  res.json(targets);
+app.get('/api/targets/:month', async (req, res) => {
+  try {
+    const targets = await db.getTargets(req.params.month);
+    res.json(targets);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/targets', (req, res) => {
-  const { month, targets } = req.body;
-  const result = db.upsertTargetsBulk(month, targets);
-  res.json(result);
+app.post('/api/targets', async (req, res) => {
+  try {
+    const { month, targets } = req.body;
+    const result = await db.upsertTargetsBulk(month, targets);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Calculate ---
@@ -126,17 +142,17 @@ app.post('/api/calculate', async (req, res) => {
       (r) => r['Deliveries - DeliveryId → CreatedAt: Month'].startsWith(month)
     );
 
-    const config = db.getConfig(month);
+    const config = await db.getConfig(month);
     if (!config) {
       return res.status(400).json({ error: 'Please save incentive config for this month first.' });
     }
 
-    const targets = db.getTargets(month);
+    const targets = await db.getTargets(month);
     if (targets.length === 0) {
       return res.status(400).json({ error: 'Please set agent targets for this month first.' });
     }
 
-    const results = db.calculateAndSave(month, monthlySales, config, targets);
+    const results = await db.calculateAndSave(month, monthlySales, config, targets);
     res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -145,9 +161,13 @@ app.post('/api/calculate', async (req, res) => {
 
 // --- Results ---
 
-app.get('/api/results/:month?', (req, res) => {
-  const results = db.getResults(req.params.month);
-  res.json(results);
+app.get('/api/results/:month?', async (req, res) => {
+  try {
+    const results = await db.getResults(req.params.month);
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => {
