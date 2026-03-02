@@ -170,6 +170,43 @@ app.get('/api/results/:month?', async (req, res) => {
   }
 });
 
+// --- Nightly Auto-Calculate (called by cron, localhost only) ---
+
+app.post('/internal/nightly-calculate', async (req, res) => {
+  // Only allow from localhost
+  const ip = req.ip || req.connection.remoteAddress;
+  if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  try {
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const salesData = await fetchMetabase(140);
+    const monthlySales = salesData.filter(
+      (r) => r['Deliveries - DeliveryId → CreatedAt: Month'].startsWith(month)
+    );
+
+    const config = await db.getConfig(month);
+    if (!config) {
+      return res.json({ status: 'skipped', reason: `No config set for ${month}` });
+    }
+
+    const targets = await db.getTargets(month);
+    if (targets.length === 0) {
+      return res.json({ status: 'skipped', reason: `No targets set for ${month}` });
+    }
+
+    const results = await db.calculateAndSave(month, monthlySales, config, targets);
+    console.log(`[Nightly] Calculated incentives for ${month}: ${results.length} agents`);
+    res.json({ status: 'ok', month, agents: results.length });
+  } catch (err) {
+    console.error('[Nightly] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Incentive Calculator running at http://localhost:${PORT}`);
 });
